@@ -1,39 +1,47 @@
 #include <memory>
 #include <string>
 #include <thread>
-#include <iostream>
 #include <print>
 #include <mutex>
+#include <condition_variable>
 
-class Fork{
-private:
-    bool occupied;
+struct Fork {
+    bool occupied = false;
     std::mutex mutex;
-public: 
-    void pickUp(){
-        std::unique_lock lock(mutex);
-        occupied = true;
+    std::condition_variable taken;
+
+    void pickup(std::string_view philosopherName, std::string_view hand) {
+        {
+            std::unique_lock lock(mutex);
+            taken.wait(lock, [&] {
+                std::println("{} is waiting for {} hand fork", philosopherName, hand);
+                return !occupied;
+            });
+            std::println("{} is taking {} hand fork", philosopherName, hand);
+            occupied = true;
+        }
     }
 
-    void layDown(){
+    void layDown(std::string_view philosopherName, std::string_view hand) {
+        std::println("{} is releasing {} hand fork", philosopherName, hand);
         occupied = false;
+        taken.notify_all();
     }
 };
 
-class Philosopher{
-private: 
-    std::shared_ptr<Fork> rightFork;
-    std::shared_ptr<Fork> leftFork;
+class Philosopher {
+private:
     std::string name;
 
-public:
+    std::shared_ptr<Fork> rightFork;
+    std::shared_ptr<Fork> leftFork;
 
-    Philosopher(std::string name) : name(name){};
+public:
+    Philosopher(std::string name) : name(name) {}
 
     std::shared_ptr<Fork> RightFork() const {
         return rightFork;
     }
-
     std::shared_ptr<Fork> &RightFork() {
         return rightFork;
     }
@@ -41,44 +49,68 @@ public:
     std::shared_ptr<Fork> LeftFork() const {
         return leftFork;
     }
-
     std::shared_ptr<Fork> &LeftFork() {
         return leftFork;
     }
 
-    void eat(){
-        while(true){
-            leftFork -> pickUp();
-            std::println("{} left pickup leftFork", name);
-            rightFork -> pickUp();
-            std::println("{} right pickup rightFork", name);
-            //Simulating Philosopher is eating
+    void eat() {
+        while (true) {
+            leftFork->pickup(name, "left");
+            if (rightFork->occupied) {
+                leftFork->layDown(name, "left");
+                continue;
+            }
+            rightFork->pickup(name, "right");
+
+            // Simulating the Philosopher eating
+            std::println("{} started eating", name);
             std::this_thread::sleep_for(std::chrono::seconds(2));
-            std::println("{} done eating", name);
-            leftFork -> layDown();
-            std::println("{} left laydown leftFork", name);
-            rightFork -> layDown();
-            std::println("{} right laydown rightFork", name);
-        };
-    }  
+            std::println("{} is done eating", name);
+
+            leftFork->layDown(name, "left");
+            rightFork->layDown(name, "right");
+        }
+    }
 };
 
-int main(){
-
+int main() {
     std::shared_ptr<Fork> fork1 = std::make_shared<Fork>();
     std::shared_ptr<Fork> fork2 = std::make_shared<Fork>();
+    std::shared_ptr<Fork> fork3 = std::make_shared<Fork>();
+    std::shared_ptr<Fork> fork4 = std::make_shared<Fork>();
+    std::shared_ptr<Fork> fork5 = std::make_shared<Fork>();
+
     Philosopher socrates("Socrates");
     socrates.LeftFork() = fork1;
     socrates.RightFork() = fork2;
+
     Philosopher diogenes("Diogenes");
     diogenes.LeftFork() = fork2;
-    diogenes.RightFork() = fork1;
-    //socrates.eat();
-    std::thread threadSocrates([&](){socrates.eat();});
-    //diogenes.eat();
-    std::thread threadDiogenes([&](){diogenes.eat();});
+    diogenes.RightFork() = fork3;
+
+    Philosopher platon("Platon");
+    platon.LeftFork() = fork3;
+    platon.RightFork() = fork4;
+
+    Philosopher phytagoras("Phytagoras");
+    phytagoras.LeftFork() = fork4;
+    phytagoras.RightFork() = fork5;
+
+    Philosopher zeno("Zeno");
+    zeno.LeftFork() = fork5;
+    zeno.RightFork() = fork1;
+
+    std::thread threadSocrates([&](){ socrates.eat(); });
+    std::thread threadDiogenes([&](){ diogenes.eat(); });
+    std::thread threadPlaton([&](){ platon.eat(); });
+    std::thread threadPhytagoras([&](){ phytagoras.eat(); });
+    std::thread threadZeno([&](){ zeno.eat(); });
+
     threadSocrates.join();
     threadDiogenes.join();
+    threadPlaton.join();
+    threadPhytagoras.join();
+    threadZeno.join();
 
     return 0;
 }
