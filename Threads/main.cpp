@@ -1,6 +1,7 @@
 #include <random>
 #include <thread>
 #include <print>
+#include <algorithm>
 
 class Adder {
 private:
@@ -53,15 +54,11 @@ public:
         thread8.join();
         thread9.join();
         thread10.join();
+        
+        std::sort(this->results, this->results + 10);
+        max = results[9];
 
-        for(int i=0; i<10; i++){
-            if(results[i] > max){
-                max = results[i];
-                index = i;
-            }
-        }
-
-        std::println("Thread {} has the highest score with {}\n", index, max);
+        std::println("The highest score is {}\n", max);
     }
 };
 
